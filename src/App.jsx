@@ -77,6 +77,9 @@ function useThreeBackground(canvasRef, isDark) {
     const sceneColor = isDark ? 0xf7f4ec : 0x111111;
     const wireOpacity = isDark ? 0.1 : 0.06;
     const ringOpacity = isDark ? 0.22 : 0.15;
+    const particleRadius = isDark ? 17.0 : 24.0;
+    const particleSize = isDark ? 0.34 : 0.48;
+    const maxParticleSize = isDark ? 2.8 : 3.35;
 
     const renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -109,13 +112,17 @@ function useThreeBackground(canvasRef, isDark) {
     const particleMaterial = new ShaderMaterial({
       uniforms: {
         uMouse: { value: mouseUniform },
-        uRadius: { value: 16.0 },
+        uRadius: { value: particleRadius },
+        uPointSize: { value: particleSize },
+        uMaxPointSize: { value: maxParticleSize },
         uTime: { value: 0.0 },
         uColor: { value: new Color(sceneColor) },
       },
       vertexShader: `
         uniform vec3 uMouse;
         uniform float uRadius;
+        uniform float uPointSize;
+        uniform float uMaxPointSize;
         uniform float uTime;
         varying float vAlpha;
 
@@ -127,7 +134,7 @@ function useThreeBackground(canvasRef, isDark) {
           float d = distance(worldPos.xy, uMouse.xy);
           vAlpha = 1.0 - smoothstep(0.0, uRadius, d);
           vec4 mvPos = modelViewMatrix * vec4(p, 1.0);
-          gl_PointSize = 0.45 * (300.0 / -mvPos.z);
+          gl_PointSize = clamp(uPointSize * (300.0 / -mvPos.z), 0.85, uMaxPointSize);
           gl_Position = projectionMatrix * mvPos;
         }
       `,
@@ -136,7 +143,8 @@ function useThreeBackground(canvasRef, isDark) {
         varying float vAlpha;
 
         void main() {
-          float alpha = vAlpha;
+          float particleEdge = smoothstep(0.5, 0.16, distance(gl_PointCoord, vec2(0.5)));
+          float alpha = vAlpha * particleEdge * 0.78;
 
           if (alpha < 0.01) discard;
 
