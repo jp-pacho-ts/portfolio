@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { Moon, Sun } from "lucide-react";
 import {
   BufferAttribute,
   BufferGeometry,
+  Color,
   EdgesGeometry,
   IcosahedronGeometry,
   LineBasicMaterial,
@@ -68,10 +70,13 @@ function useScrolledNav() {
   return scrolled;
 }
 
-function useThreeBackground(canvasRef) {
+function useThreeBackground(canvasRef, isDark) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
+    const sceneColor = isDark ? 0xf7f4ec : 0x111111;
+    const wireOpacity = isDark ? 0.1 : 0.06;
+    const ringOpacity = isDark ? 0.22 : 0.15;
 
     const renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -106,6 +111,7 @@ function useThreeBackground(canvasRef) {
         uMouse: { value: mouseUniform },
         uRadius: { value: 16.0 },
         uTime: { value: 0.0 },
+        uColor: { value: new Color(sceneColor) },
       },
       vertexShader: `
         uniform vec3 uMouse;
@@ -126,6 +132,7 @@ function useThreeBackground(canvasRef) {
         }
       `,
       fragmentShader: `
+        uniform vec3 uColor;
         varying float vAlpha;
 
         void main() {
@@ -133,7 +140,7 @@ function useThreeBackground(canvasRef) {
 
           if (alpha < 0.01) discard;
 
-          gl_FragColor = vec4(0.067, 0.067, 0.067, alpha);
+          gl_FragColor = vec4(uColor, alpha);
         }
       `,
       transparent: true,
@@ -145,9 +152,9 @@ function useThreeBackground(canvasRef) {
 
     const wireGeometry = new EdgesGeometry(new IcosahedronGeometry(26, 2));
     const wireMaterial = new LineBasicMaterial({
-      color: 0x111111,
+      color: sceneColor,
       transparent: true,
-      opacity: 0.06,
+      opacity: wireOpacity,
     });
     const wire = new LineSegments(wireGeometry, wireMaterial);
     scene.add(wire);
@@ -155,7 +162,7 @@ function useThreeBackground(canvasRef) {
     const createRing = (radius, tube, x, y, z, rotationX, opacity) => {
       const ring = new Mesh(
         new TorusGeometry(radius, tube, 8, 100),
-        new MeshBasicMaterial({ color: 0x111111, transparent: true, opacity })
+        new MeshBasicMaterial({ color: sceneColor, transparent: true, opacity })
       );
       ring.rotation.x = rotationX;
       ring.position.set(x, y, z);
@@ -163,8 +170,8 @@ function useThreeBackground(canvasRef) {
       return ring;
     };
 
-    const ring1 = createRing(9, 0.025, 20, -10, -4, Math.PI / 4, 0.15);
-    const ring2 = createRing(5, 0.015, -18, 12, -8, Math.PI / 6, 0.1);
+    const ring1 = createRing(9, 0.025, 20, -10, -4, Math.PI / 4, ringOpacity);
+    const ring2 = createRing(5, 0.015, -18, 12, -8, Math.PI / 6, ringOpacity * 0.7);
     scene.add(ring1, ring2);
 
     let rawMouseX = 0;
@@ -236,35 +243,97 @@ function useThreeBackground(canvasRef) {
       timer.dispose();
       renderer.dispose();
     };
-  }, [canvasRef]);
+  }, [canvasRef, isDark]);
 }
 
 function App() {
   const canvasRef = useRef(null);
+  const themeButtonRef = useRef(null);
+  const themeTimerRef = useRef(null);
   const scrolled = useScrolledNav();
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window === "undefined") return false;
 
-  useThreeBackground(canvasRef);
+    const savedTheme = window.localStorage.getItem("jp-theme");
+    if (savedTheme) return savedTheme === "dark";
+
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
+  const [themeAnimating, setThemeAnimating] = useState(false);
+
+  useThreeBackground(canvasRef, isDark);
+
+  useEffect(() => {
+    const theme = isDark ? "dark" : "light";
+
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    window.localStorage.setItem("jp-theme", theme);
+  }, [isDark]);
+
+  useEffect(() => {
+    return () => {
+      window.clearTimeout(themeTimerRef.current);
+    };
+  }, []);
+
+  const handleThemeToggle = () => {
+    const rect = themeButtonRef.current?.getBoundingClientRect();
+    const x = rect ? rect.left + rect.width / 2 : window.innerWidth - 48;
+    const y = rect ? rect.top + rect.height / 2 : 36;
+
+    document.documentElement.style.setProperty("--theme-x", `${x}px`);
+    document.documentElement.style.setProperty("--theme-y", `${y}px`);
+    window.clearTimeout(themeTimerRef.current);
+    setThemeAnimating(false);
+
+    window.requestAnimationFrame(() => {
+      setIsDark((current) => !current);
+      setThemeAnimating(true);
+      themeTimerRef.current = window.setTimeout(() => {
+        setThemeAnimating(false);
+      }, 760);
+    });
+  };
 
   return (
     <>
       <canvas ref={canvasRef} className="bg" aria-hidden="true" />
+      <div
+        className={`theme-transition ${themeAnimating ? "is-active" : ""}`}
+        aria-hidden="true"
+      />
 
       <nav className={scrolled ? "scrolled" : ""}>
         <a className="logo" href="#hero" aria-label="Back to top">
           JP<span> / </span>Dev
         </a>
-        <ul className="nav-links">
-          {navLinks.map((link) => (
-            <li key={link}>
-              <a href={`#${link}`}>{link}</a>
+        <div className="nav-actions">
+          <ul className="nav-links">
+            {navLinks.map((link) => (
+              <li key={link}>
+                <a href={`#${link}`}>{link}</a>
+              </li>
+            ))}
+            <li>
+              <a className="nav-cta" href="#contact">
+                Hire me
+              </a>
             </li>
-          ))}
-          <li>
-            <a className="nav-cta" href="#contact">
-              Hire me
-            </a>
-          </li>
-        </ul>
+          </ul>
+          <button
+            className="theme-toggle"
+            type="button"
+            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            aria-pressed={isDark}
+            onClick={handleThemeToggle}
+            ref={themeButtonRef}
+            title={isDark ? "Light mode" : "Dark mode"}
+          >
+            <Sun className="theme-icon theme-icon-sun" aria-hidden="true" size={16} />
+            <Moon className="theme-icon theme-icon-moon" aria-hidden="true" size={16} />
+          </button>
+        </div>
       </nav>
 
       <main>

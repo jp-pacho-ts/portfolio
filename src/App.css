@@ -15,7 +15,22 @@
   --mid: #555555;
   --soft: #aaaaaa;
   --line: rgba(0, 0, 0, 0.09);
+  --nav-bg: rgba(255, 255, 255, 0.92);
+  --theme-x: calc(100vw - 4rem);
+  --theme-y: 36px;
+  --theme-wipe: #ffffff;
   --font: "Montserrat", sans-serif;
+}
+
+:root[data-theme="dark"] {
+  --white: #101010;
+  --off: #171715;
+  --ink: #f7f4ec;
+  --mid: #c7c1b3;
+  --soft: #85806f;
+  --line: rgba(255, 255, 255, 0.13);
+  --nav-bg: rgba(16, 16, 16, 0.9);
+  --theme-wipe: #101010;
 }
 
 html {
@@ -28,6 +43,9 @@ body {
   color: var(--ink);
   font-family: var(--font);
   overflow-x: hidden;
+  transition:
+    background 0.45s ease,
+    color 0.45s ease;
 }
 
 button,
@@ -57,6 +75,21 @@ canvas.bg {
   width: 100vw;
   height: 100vh;
   pointer-events: none;
+  transition: opacity 0.45s ease;
+}
+
+.theme-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  background: var(--theme-wipe);
+  clip-path: circle(0 at var(--theme-x) var(--theme-y));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.theme-transition.is-active {
+  animation: theme-wipe 0.75s cubic-bezier(0.7, 0, 0.2, 1);
 }
 
 nav {
@@ -77,7 +110,7 @@ nav {
 
 nav.scrolled {
   border-bottom: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--nav-bg);
   backdrop-filter: blur(16px);
 }
 
@@ -100,6 +133,12 @@ nav.scrolled {
   align-items: center;
   gap: 2.5rem;
   list-style: none;
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .nav-links a {
@@ -134,6 +173,62 @@ nav.scrolled {
 .nav-cta:hover {
   color: var(--white) !important;
   background: var(--mid) !important;
+}
+
+.theme-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--ink);
+  cursor: pointer;
+  overflow: hidden;
+  transition:
+    background 0.25s ease,
+    border-color 0.25s ease,
+    color 0.25s ease,
+    transform 0.25s ease;
+}
+
+.theme-toggle:hover {
+  border-color: var(--ink);
+  transform: translateY(-1px);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.theme-icon {
+  position: absolute;
+  transition:
+    opacity 0.3s ease,
+    transform 0.45s cubic-bezier(0.7, 0, 0.2, 1);
+}
+
+.theme-icon-sun {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+.theme-icon-moon {
+  opacity: 0;
+  transform: rotate(-70deg) scale(0.45);
+}
+
+.theme-toggle[aria-pressed="true"] .theme-icon-sun {
+  opacity: 0;
+  transform: rotate(70deg) scale(0.45);
+}
+
+.theme-toggle[aria-pressed="true"] .theme-icon-moon {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
 }
 
 main {
@@ -218,15 +313,16 @@ main {
   letter-spacing: 0.16em;
   text-decoration: none;
   text-transform: uppercase;
+  transition:
+    background 0.25s ease,
+    border-color 0.25s ease,
+    color 0.25s ease;
 }
 
 .btn-primary {
   border-color: var(--ink);
   color: var(--white);
   background: var(--ink);
-  transition:
-    background 0.2s,
-    border-color 0.2s;
 }
 
 .btn-primary:hover {
@@ -237,7 +333,6 @@ main {
 .btn-ghost {
   color: var(--ink);
   font-weight: 600;
-  transition: border-color 0.2s;
 }
 
 .btn-ghost:hover {
@@ -358,11 +453,15 @@ section {
   color: inherit;
   cursor: pointer;
   text-decoration: none;
-  transition: background 0.25s;
+  transition:
+    background 0.25s,
+    transform 0.25s,
+    border-color 0.25s;
 }
 
 .work-card:hover {
   background: var(--off);
+  transform: translateY(-2px);
 }
 
 .work-card-top {
@@ -627,7 +726,9 @@ section {
   background: var(--white);
   padding: 1.5rem 2rem;
   text-decoration: none;
-  transition: background 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s;
 }
 
 .clink:hover {
@@ -699,6 +800,23 @@ footer {
   color: var(--ink);
 }
 
+@keyframes theme-wipe {
+  0% {
+    clip-path: circle(0 at var(--theme-x) var(--theme-y));
+    opacity: 1;
+  }
+
+  78% {
+    clip-path: circle(150vmax at var(--theme-x) var(--theme-y));
+    opacity: 1;
+  }
+
+  100% {
+    clip-path: circle(150vmax at var(--theme-x) var(--theme-y));
+    opacity: 0;
+  }
+}
+
 @media (max-width: 900px) {
   nav {
     padding: 0 1.5rem;
@@ -706,6 +824,10 @@ footer {
 
   .nav-links {
     display: none;
+  }
+
+  .nav-actions {
+    gap: 0;
   }
 
   .hero {
