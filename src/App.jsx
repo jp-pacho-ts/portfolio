@@ -4,19 +4,12 @@ import {
   BufferAttribute,
   BufferGeometry,
   Color,
-  EdgesGeometry,
-  IcosahedronGeometry,
-  LineBasicMaterial,
   LineSegments,
-  Mesh,
-  MeshBasicMaterial,
   PerspectiveCamera,
   Points,
   Scene,
   ShaderMaterial,
-  TorusGeometry,
   Timer,
-  Vector3,
   WebGLRenderer,
 } from "three";
 import { projects, stack } from "./data";
@@ -74,152 +67,167 @@ function useThreeBackground(canvasRef, isDark) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
+
     const sceneColor = isDark ? 0xf7f4ec : 0x111111;
-    const wireOpacity = isDark ? 0.1 : 0.06;
-    const ringOpacity = isDark ? 0.22 : 0.15;
-    const particleRadius = isDark ? 17.0 : 24.0;
-    const particleSize = isDark ? 0.34 : 0.48;
-    const maxParticleSize = isDark ? 2.8 : 3.35;
+    const gridOp   = isDark ? 0.22 : 0.10;
+    const pAlpha   = isDark ? 0.20 : 0.11;
+    const pSize    = isDark ? 0.55 : 0.80;
+    const pMaxSize = isDark ? 3.0  : 4.0;
 
     const renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
 
-    const scene = new Scene();
-    const camera = new PerspectiveCamera(
-      60,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      200
-    );
-    camera.position.z = 45;
+    const scene  = new Scene();
+    const camera = new PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 350);
+    camera.position.set(0, 14, 28);
 
-    const particleCount = 25000;
-    const positions = new Float32Array(particleCount * 3);
+    // ─── Perspective grid ─────────────────────────────────────────────────
+    const SPACING   = 8;
+    const HALF_W    = 72;
+    const Z_NEAR    = 28;
+    const Z_FAR     = -210;
+    const COL_COUNT = Math.round((HALF_W * 2) / SPACING) + 1;
+    const ROW_COUNT = Math.round((Z_NEAR - Z_FAR) / SPACING) + 3;
 
-    for (let i = 0; i < particleCount; i += 1) {
-      const radius = Math.random() ** 0.4;
-      const angle = Math.random() * Math.PI * 2;
-      positions[i * 3] = (Math.random() - 0.5) * 140 + Math.sin(angle) * radius * 20;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 100 + Math.cos(angle) * radius * 20;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 30;
+    // Z-lines: run along Z at fixed X, static (these converge to vanishing pt)
+    const zVerts = [];
+    for (let i = 0; i < COL_COUNT; i += 1) {
+      const x = (i / (COL_COUNT - 1) - 0.5) * HALF_W * 2;
+      zVerts.push(x, 0, Z_NEAR, x, 0, Z_FAR);
     }
+    const zGeo = new BufferGeometry();
+    zGeo.setAttribute("position", new BufferAttribute(new Float32Array(zVerts), 3));
 
-    const particleGeometry = new BufferGeometry();
-    particleGeometry.setAttribute("position", new BufferAttribute(positions, 3));
+    // X-lines: run along X at fixed Z, scroll toward viewer each frame
+    const xVerts = [];
+    for (let j = 0; j < ROW_COUNT; j += 1) {
+      const z = Z_NEAR - j * SPACING;
+      xVerts.push(-HALF_W, 0, z, HALF_W, 0, z);
+    }
+    const xGeo = new BufferGeometry();
+    xGeo.setAttribute("position", new BufferAttribute(new Float32Array(xVerts), 3));
 
-    const mouseUniform = new Vector3(99999, 99999, 0);
-    const particleMaterial = new ShaderMaterial({
+    // Grid shader: fade lines to transparent as they recede toward the horizon
+    const gridVS = `
+      varying float vFade;
+      void main() {
+        vec4 wPos = modelMatrix * vec4(position, 1.0);
+        vFade = 1.0 - smoothstep(-55.0, -185.0, wPos.z);
+        gl_Position = projectionMatrix * viewMatrix * wPos;
+      }
+    `;
+    const gridFS = `
+      uniform vec3  uColor;
+      uniform float uOp;
+      varying float vFade;
+      void main() {
+        float a = uOp * vFade;
+        if (a < 0.005) discard;
+        gl_FragColor = vec4(uColor, a);
+      }
+    `;
+    const makeGridMat = () => new ShaderMaterial({
       uniforms: {
-        uMouse: { value: mouseUniform },
-        uRadius: { value: particleRadius },
-        uPointSize: { value: particleSize },
-        uMaxPointSize: { value: maxParticleSize },
-        uTime: { value: 0.0 },
         uColor: { value: new Color(sceneColor) },
+        uOp:    { value: gridOp },
+      },
+      vertexShader:   gridVS,
+      fragmentShader: gridFS,
+      transparent:    true,
+      depthWrite:     false,
+    });
+
+    const zMat   = makeGridMat();
+    const xMat   = makeGridMat();
+    const zLines = new LineSegments(zGeo, zMat);
+    const xLines = new LineSegments(xGeo, xMat);
+    scene.add(zLines, xLines);
+
+    // ─── Ambient particles floating above the grid ────────────────────────
+    const P_COUNT = 1600;
+    const pPos    = new Float32Array(P_COUNT * 3);
+    for (let i = 0; i < P_COUNT; i += 1) {
+      pPos[i * 3]     = (Math.random() - 0.5) * 160;
+      pPos[i * 3 + 1] = Math.random() * 35 + 1;
+      pPos[i * 3 + 2] = (Math.random() - 0.5) * 230;
+    }
+    const pGeo = new BufferGeometry();
+    pGeo.setAttribute("position", new BufferAttribute(pPos, 3));
+
+    const pMat = new ShaderMaterial({
+      uniforms: {
+        uTime:    { value: 0 },
+        uColor:   { value: new Color(sceneColor) },
+        uAlpha:   { value: pAlpha },
+        uSize:    { value: pSize },
+        uMaxSize: { value: pMaxSize },
       },
       vertexShader: `
-        uniform vec3 uMouse;
-        uniform float uRadius;
-        uniform float uPointSize;
-        uniform float uMaxPointSize;
         uniform float uTime;
-        varying float vAlpha;
-
+        uniform float uSize;
+        uniform float uMaxSize;
         void main() {
           vec3 p = position;
-          float wave = sin(p.x * 0.12 + uTime * 0.9) * cos(p.y * 0.14 + uTime * 0.7) * 2.5;
-          p.z += wave;
-          vec4 worldPos = modelMatrix * vec4(p, 1.0);
-          float d = distance(worldPos.xy, uMouse.xy);
-          vAlpha = 1.0 - smoothstep(0.0, uRadius, d);
+          p.y += sin(p.x * 0.07 + uTime * 0.5) * cos(p.z * 0.05 + uTime * 0.4) * 2.5;
           vec4 mvPos = modelViewMatrix * vec4(p, 1.0);
-          gl_PointSize = clamp(uPointSize * (300.0 / -mvPos.z), 0.85, uMaxPointSize);
-          gl_Position = projectionMatrix * mvPos;
+          gl_PointSize = clamp(uSize * (200.0 / -mvPos.z), 0.5, uMaxSize);
+          gl_Position  = projectionMatrix * mvPos;
         }
       `,
       fragmentShader: `
-        uniform vec3 uColor;
-        varying float vAlpha;
-
+        uniform vec3  uColor;
+        uniform float uAlpha;
         void main() {
-          float particleEdge = smoothstep(0.5, 0.16, distance(gl_PointCoord, vec2(0.5)));
-          float alpha = vAlpha * particleEdge * 0.78;
-
-          if (alpha < 0.01) discard;
-
-          gl_FragColor = vec4(uColor, alpha);
+          float e = smoothstep(0.5, 0.2, distance(gl_PointCoord, vec2(0.5)));
+          if (e < 0.01) discard;
+          gl_FragColor = vec4(uColor, uAlpha * e);
         }
       `,
       transparent: true,
-      depthWrite: false,
+      depthWrite:  false,
     });
 
-    const dots = new Points(particleGeometry, particleMaterial);
+    const dots = new Points(pGeo, pMat);
     scene.add(dots);
 
-    const wireGeometry = new EdgesGeometry(new IcosahedronGeometry(26, 2));
-    const wireMaterial = new LineBasicMaterial({
-      color: sceneColor,
-      transparent: true,
-      opacity: wireOpacity,
-    });
-    const wire = new LineSegments(wireGeometry, wireMaterial);
-    scene.add(wire);
-
-    const createRing = (radius, tube, x, y, z, rotationX, opacity) => {
-      const ring = new Mesh(
-        new TorusGeometry(radius, tube, 8, 100),
-        new MeshBasicMaterial({ color: sceneColor, transparent: true, opacity })
-      );
-      ring.rotation.x = rotationX;
-      ring.position.set(x, y, z);
-
-      return ring;
-    };
-
-    const ring1 = createRing(9, 0.025, 20, -10, -4, Math.PI / 4, ringOpacity);
-    const ring2 = createRing(5, 0.015, -18, 12, -8, Math.PI / 6, ringOpacity * 0.7);
-    scene.add(ring1, ring2);
-
+    // ─── Mouse tracking ───────────────────────────────────────────────────
     let rawMouseX = 0;
     let rawMouseY = 0;
+    let smoothCamX = 0;
+    let smoothCamY = 14;
 
-    const handleMouseMove = (event) => {
-      rawMouseX = (event.clientX / window.innerWidth - 0.5) * 2;
-      rawMouseY = (event.clientY / window.innerHeight - 0.5) * 2;
-
-      const ndc = new Vector3(rawMouseX, -rawMouseY, 0.5).unproject(camera);
-      const dir = ndc.clone().sub(camera.position).normalize();
-      const distance = -camera.position.z / dir.z;
-
-      mouseUniform.copy(camera.position).addScaledVector(dir, distance);
-      particleMaterial.uniforms.uMouse.value.copy(mouseUniform);
+    const handleMouseMove = (e) => {
+      rawMouseX = (e.clientX / window.innerWidth  - 0.5) * 2;
+      rawMouseY = (e.clientY / window.innerHeight - 0.5) * 2;
     };
-
-    const handleMouseLeave = () => {
-      particleMaterial.uniforms.uMouse.value.set(99999, 99999, 0);
-    };
-
     window.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseleave", handleMouseLeave);
 
+    // ─── Animation loop ───────────────────────────────────────────────────
     const timer = new Timer();
     timer.connect(document);
     let rafId = 0;
+    let gridZ = 0;
 
     const tick = (timestamp) => {
       rafId = requestAnimationFrame(tick);
       timer.update(timestamp);
       const elapsed = timer.getElapsed();
+      const delta   = timer.getDelta();
 
-      particleMaterial.uniforms.uTime.value = elapsed;
-      dots.rotation.y = elapsed * 0.006 + rawMouseX * 0.02;
-      dots.rotation.x = rawMouseY * 0.015;
-      wire.rotation.y = elapsed * 0.018 + rawMouseX * 0.025;
-      wire.rotation.x = elapsed * 0.012 + rawMouseY * 0.018;
-      ring1.rotation.z = elapsed * 0.055;
-      ring2.rotation.z = -elapsed * 0.04;
+      // Scroll X-lines toward viewer, loop seamlessly
+      gridZ += delta * 5;
+      if (gridZ >= SPACING) gridZ -= SPACING;
+      xLines.position.z = gridZ;
+
+      // Smooth camera pan with mouse
+      smoothCamX += (rawMouseX * 6  - smoothCamX) * 0.04;
+      smoothCamY += (14 - rawMouseY * 3 - smoothCamY) * 0.04;
+      camera.position.x = smoothCamX;
+      camera.position.y = smoothCamY;
+      camera.lookAt(smoothCamX * 0.25, 0, -20);
+
+      pMat.uniforms.uTime.value = elapsed;
 
       renderer.render(scene, camera);
     };
@@ -231,23 +239,15 @@ function useThreeBackground(canvasRef, isDark) {
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     };
-
     window.addEventListener("resize", handleResize);
 
     return () => {
       cancelAnimationFrame(rafId);
       window.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseleave", handleMouseLeave);
       window.removeEventListener("resize", handleResize);
-
-      particleGeometry.dispose();
-      particleMaterial.dispose();
-      wireGeometry.dispose();
-      wireMaterial.dispose();
-      ring1.geometry.dispose();
-      ring1.material.dispose();
-      ring2.geometry.dispose();
-      ring2.material.dispose();
+      zGeo.dispose(); zMat.dispose();
+      xGeo.dispose(); xMat.dispose();
+      pGeo.dispose(); pMat.dispose();
       timer.dispose();
       renderer.dispose();
     };
@@ -259,6 +259,7 @@ function App() {
   const themeButtonRef = useRef(null);
   const themeTimerRef = useRef(null);
   const scrolled = useScrolledNav();
+  const [loaderPhase, setLoaderPhase] = useState("active");
   const [isDark, setIsDark] = useState(() => {
     if (typeof window === "undefined") return false;
 
@@ -270,6 +271,12 @@ function App() {
   const [themeAnimating, setThemeAnimating] = useState(false);
 
   useThreeBackground(canvasRef, isDark);
+
+  useEffect(() => {
+    const leave  = setTimeout(() => setLoaderPhase("leaving"), 1800);
+    const remove = setTimeout(() => setLoaderPhase("gone"),    2500);
+    return () => { clearTimeout(leave); clearTimeout(remove); };
+  }, []);
 
   useEffect(() => {
     const theme = isDark ? "dark" : "light";
@@ -306,6 +313,20 @@ function App() {
 
   return (
     <>
+      {loaderPhase !== "gone" && (
+        <div
+          className={`loader${loaderPhase === "leaving" ? " is-leaving" : ""}`}
+          aria-label="Loading"
+          aria-live="polite"
+        >
+          <div className="loader-panel loader-panel-top" />
+          <div className="loader-center">
+            <div className="loader-logo">JP<span> / </span>Dev</div>
+            <div className="loader-sub">Full-Stack Developer</div>
+          </div>
+          <div className="loader-panel loader-panel-bottom" />
+        </div>
+      )}
       <canvas ref={canvasRef} className="bg" aria-hidden="true" />
       <div
         className={`theme-transition ${themeAnimating ? "is-active" : ""}`}
@@ -347,7 +368,6 @@ function App() {
       <main>
         <section className="hero" id="hero">
           <div className="hero-left">
-            <div className="hero-badge">Available for freelance</div>
             <h1 className="hero-title">
               Full-Stack
               <br />

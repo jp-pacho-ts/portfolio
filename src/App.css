@@ -68,6 +68,77 @@ a {
   min-height: 100vh;
 }
 
+/* ── Loader ─────────────────────────────────────────────────────────────── */
+
+.loader {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  pointer-events: all;
+}
+
+.loader.is-leaving {
+  pointer-events: none;
+}
+
+.loader-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: var(--white);
+  transition: transform 0.65s cubic-bezier(0.76, 0, 0.24, 1);
+}
+
+.loader-panel-top { top: 0; }
+.loader-panel-bottom { bottom: 0; }
+
+.loader.is-leaving .loader-panel-top    { transform: translateY(-101%); }
+.loader.is-leaving .loader-panel-bottom { transform: translateY(101%); }
+
+.loader-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  opacity: 0;
+  animation: loader-fade-in 0.5s ease 0.25s forwards;
+}
+
+.loader.is-leaving .loader-center {
+  animation: loader-fade-out 0.25s ease forwards;
+}
+
+.loader-logo {
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.loader-logo span {
+  color: var(--soft);
+  font-weight: 400;
+}
+
+.loader-sub {
+  margin-top: 0.55rem;
+  color: var(--soft);
+  font-size: 0.52rem;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+
+@keyframes loader-fade-in  { to { opacity: 1; } }
+@keyframes loader-fade-out { to { opacity: 0; } }
+
+/* ── Canvas background ───────────────────────────────────────────────────── */
+
 canvas.bg {
   position: fixed;
   inset: 0;
@@ -248,28 +319,6 @@ main {
 
 .hero-left {
   padding-top: 72px;
-}
-
-.hero-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 2rem;
-  border: 1px solid var(--line);
-  padding: 0.4rem 0.9rem;
-  color: var(--mid);
-  font-size: 0.6rem;
-  font-weight: 600;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-}
-
-.hero-badge::before {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ink);
-  content: "";
 }
 
 .hero-title {
