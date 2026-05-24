@@ -2,7 +2,7 @@
 
 Personal portfolio site for JP Pacho, a full-stack developer based in Tacloban City, Philippines. Built with React, Three.js, and Vite.
 
-**Live site:** https://jp-pacho-ts.github.io/portfolio/
+**Live site:** https://jp-pacho-ts.github.io
 
 ---
 
