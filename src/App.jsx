@@ -145,7 +145,8 @@ function useThreeBackground(canvasRef, isDark) {
     scene.add(zLines, xLines);
 
     // ─── Ambient particles floating above the grid ────────────────────────
-    const P_COUNT = 1600;
+    const isMobile = window.innerWidth < 768;
+    const P_COUNT = isMobile ? 700 : 1600;
     const pPos    = new Float32Array(P_COUNT * 3);
     for (let i = 0; i < P_COUNT; i += 1) {
       pPos[i * 3]     = (Math.random() - 0.5) * 160;
@@ -201,7 +202,13 @@ function useThreeBackground(canvasRef, isDark) {
       rawMouseX = (e.clientX / window.innerWidth  - 0.5) * 2;
       rawMouseY = (e.clientY / window.innerHeight - 0.5) * 2;
     };
+    const handleTouchMove = (e) => {
+      if (!e.touches[0]) return;
+      rawMouseX = (e.touches[0].clientX / window.innerWidth  - 0.5) * 2;
+      rawMouseY = (e.touches[0].clientY / window.innerHeight - 0.5) * 2;
+    };
     window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("touchmove", handleTouchMove, { passive: true });
 
     // ─── Animation loop ───────────────────────────────────────────────────
     const timer = new Timer();
@@ -244,6 +251,7 @@ function useThreeBackground(canvasRef, isDark) {
     return () => {
       cancelAnimationFrame(rafId);
       window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("touchmove", handleTouchMove);
       window.removeEventListener("resize", handleResize);
       zGeo.dispose(); zMat.dispose();
       xGeo.dispose(); xMat.dispose();
